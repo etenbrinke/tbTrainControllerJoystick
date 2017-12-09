@@ -8,6 +8,7 @@ import sys
 import pygame
 import ThunderBorg
 import logging
+import random
 
 logger = logging.getLogger('trainController')
 hdlr = logging.FileHandler('/var/log/trainController.log')
@@ -46,6 +47,7 @@ if not failsafe:
     sys.exit()
 
 # Settings for the joystick
+# index numbers for each control: https://www.piborg.org/blog/rpi-ps3-help
 axisUpDown = 1                          # Joystick axis to read for up / down position
 axisUpDownInverted = False              # Set this to True if up and down appear to be swapped
 buttonEmergencyBreak = 14               # Joystick button number (Cross) for the Emergency Break
@@ -53,6 +55,8 @@ buttonSlowAutoStop = 15                 # Joystick button number (Square) for sl
 buttonAxisMotionMode = 11               # Joystick button number for selecting Axis Motion mode (R1)
 buttonSlowAutoStartForward = 12         # Joystick button number (Triangle) for slow auto forward to half speed of max speed
 buttonSlowAutoStartReverse = 13         # Joystick button number (Circle) for slow auto reverse to half speed of max speed
+buttonRandomModeOn = 10                 # Joystick button number for selecting random mode ON (L1)
+buttonRandomModeOff = 8                 # Joystick button number for selecting random mode OFF (L2)
 
 # Program settings
 interval = 0.00                         # Time between updates in seconds, smaller responds faster but uses more processor time
@@ -62,6 +66,7 @@ accelerationFactor = 0.001              # Acceleration factor for speedup and sl
 slowDeAccelerationFactor = 0.00005      # Deacceleration factor for auto stop
 slowAccelerationFactor = 0.00005        # Acceleration factor for auto start
 slowAutoStartMaxSpeed = 0.75            # Max speed for slow auto forward and reverse
+slowAutoStartMediumSpeed = 0.35         # Medium speed for slow auto forward and reverse (only used in random mode)
 zeroOffsetSpeed = 0.01                  # A value smaller (bigger in case speed is negative) is considered as zero speed
 
 # Power settings
@@ -128,10 +133,61 @@ try:
     hadBreak = False
     upDown = 0
     driveSpeed = 0
+    randomMode = False
+    randomLast = 0
     # Loop indefinitely
     while running:
         # Get the latest events from the system
         hadEvent = False
+        # Control train randomly
+        # We only want to let the train stop if it was driving or start driving if it was standing still
+        # While driving it is not possible to let the random mode slow it down and then continue driving in the
+        # opposite direction (this is possible by controlling the joystick but for random mode a bit unrealistic)
+        if randomMode and random.randint(0,10000) == 0:
+            randomChoice = random.randint(1,3)
+            # Keep trying to find an operation which is different from the last one
+            while randomChoice == randomLast:
+                randomChoice = random.randint(1,3)
+            randomLast = randomChoice
+            if randomChoice == 1:
+                logger.info ('Slow Auto Stop by random mode, driveSpeed slowly down from %02.2f to 0.00' % driveSpeed)
+                if driveSpeed < 0:
+                    while driveSpeed < 0:
+                        driveSpeed += slowDeAccelerationFactor
+                        if driveSpeed > -zeroOffsetSpeed:
+                            driveSpeed = 0
+                        TB.SetMotor1(driveSpeed * maxPower)
+                elif driveSpeed > 0:
+                    while driveSpeed > 0:
+                        driveSpeed -= slowDeAccelerationFactor
+                        if driveSpeed < zeroOffsetSpeed:
+                            driveSpeed = 0
+                        TB.SetMotor1(driveSpeed * maxPower)
+            elif randomChoice == 2 and driveSpeed < zeroOffsetSpeed and driveSpeed > -zeroOffsetSpeed:
+                # go drive forward only if we currently are standing 'still'
+                if random.choice([True, False]):
+                    max = slowAutoStartMaxSpeed
+                else:
+                    max = slowAutoStartMediumSpeed
+                logger.info ('Slow Auto Forward by random mode, driveSpeed slowly up from %02.2f to %02.2f' % (driveSpeed, max))
+                while driveSpeed < max:
+                    driveSpeed += slowAccelerationFactor
+                    if driveSpeed > max:
+                        driveSpeed = max
+                    TB.SetMotor1(driveSpeed * maxPower)
+            elif randomChoice == 3 and driveSpeed < zeroOffsetSpeed and driveSpeed > -zeroOffsetSpeed:
+                # go drive reverse only if we currently standing 'still'
+                if random.choice([True, False]):
+                    max = slowAutoStartMaxSpeed
+                else:
+                    max = slowAutoStartMediumSpeed
+                logger.info ('Slow Auto Reverse by random mode, driveSpeed slowly up from %02.2f to %02.2f' % (driveSpeed, -max))
+                while driveSpeed > -slowAutoStartMaxSpeed:
+                    driveSpeed -= slowAccelerationFactor
+                    if driveSpeed < -slowAutoStartMaxSpeed:
+                        driveSpeed = -slowAutoStartMaxSpeed
+                    TB.SetMotor1(driveSpeed * maxPower)
+        # Control train by joystick
         events = pygame.event.get()
         # Handle each event individually
         for event in events:
@@ -144,6 +200,14 @@ try:
                     logger.info ('Emergency Break button pressed, driveSpeed %02.2f set to 0.00' % driveSpeed)
                     driveSpeed = 0
                     TB.SetMotor1(driveSpeed)
+                    break
+                if joystick.get_button(buttonRandomModeOn):
+                    logger.info ('Random mode ON')
+                    randomMode = True
+                    break
+                if joystick.get_button(buttonRandomModeOff):
+                    logger.info ('Random mode OFF')
+                    randomMode = False
                     break
                 if joystick.get_button(buttonSlowAutoStop):
                     logger.info ('Slow Auto Stop button pressed, driveSpeed slowly down from %02.2f to 0.00' % driveSpeed)
@@ -160,25 +224,23 @@ try:
                                 driveSpeed = 0
                             TB.SetMotor1(driveSpeed * maxPower)
                     break
-                if joystick.get_button(buttonSlowAutoStartForward):
+                if joystick.get_button(buttonSlowAutoStartForward) and driveSpeed < zeroOffsetSpeed:
                     # go drive forward only if we currently drive backward or are standing still 
-                    if (driveSpeed < zeroOffsetSpeed):
-                        logger.info ('Slow Auto Forward button pressed, driveSpeed slowly up from %02.2f to %02.2f' % (driveSpeed, slowAutoStartMaxSpeed))
-                        while driveSpeed < slowAutoStartMaxSpeed:
-                            driveSpeed += slowAccelerationFactor
-                            if driveSpeed > slowAutoStartMaxSpeed:
-                                driveSpeed = slowAutoStartMaxSpeed
-                            TB.SetMotor1(driveSpeed * maxPower)
+                    logger.info ('Slow Auto Forward button pressed, driveSpeed slowly up from %02.2f to %02.2f' % (driveSpeed, slowAutoStartMaxSpeed))
+                    while driveSpeed < slowAutoStartMaxSpeed:
+                        driveSpeed += slowAccelerationFactor
+                        if driveSpeed > slowAutoStartMaxSpeed:
+                            driveSpeed = slowAutoStartMaxSpeed
+                        TB.SetMotor1(driveSpeed * maxPower)
                     break
-                if joystick.get_button(buttonSlowAutoStartReverse):
+                if joystick.get_button(buttonSlowAutoStartReverse) and driveSpeed > -zeroOffsetSpeed:
                     # go drive reverse only if we currently drive forward or are standing still 
-                    if (driveSpeed > -zeroOffsetSpeed):
-                        logger.info ('Slow Auto Reverse button pressed, driveSpeed slowly up from %02.2f to %02.2f' % (driveSpeed, slowAutoStartMaxSpeed))
-                        while driveSpeed > -slowAutoStartMaxSpeed:
-                            driveSpeed -= slowAccelerationFactor
-                            if driveSpeed < -slowAutoStartMaxSpeed:
-                                driveSpeed = -slowAutoStartMaxSpeed
-                            TB.SetMotor1(driveSpeed * maxPower)
+                    logger.info ('Slow Auto Reverse button pressed, driveSpeed slowly up from %02.2f to %02.2f' % (driveSpeed, -slowAutoStartMaxSpeed))
+                    while driveSpeed > -slowAutoStartMaxSpeed:
+                        driveSpeed -= slowAccelerationFactor
+                        if driveSpeed < -slowAutoStartMaxSpeed:
+                            driveSpeed = -slowAutoStartMaxSpeed
+                        TB.SetMotor1(driveSpeed * maxPower)
                     break
                 hadEvent = True
             elif event.type == pygame.JOYAXISMOTION:
