@@ -66,8 +66,9 @@ accelerationFactor = 0.001              # Acceleration factor for speedup and sl
 slowDeAccelerationFactor = 0.00005      # Deacceleration factor for auto stop
 slowAccelerationFactor = 0.00005        # Acceleration factor for auto start
 slowAutoStartMaxSpeed = 0.75            # Max speed for slow auto forward and reverse
-slowAutoStartMediumSpeed = 0.35         # Medium speed for slow auto forward and reverse (only used in random mode)
+slowAutoStartMediumSpeed = 0.55         # Medium speed for slow auto forward and reverse (only used in random mode)
 zeroOffsetSpeed = 0.01                  # A value smaller (bigger in case speed is negative) is considered as zero speed
+randomDriveRange = 5000                 # Choice value between 0 and randomDriveRange for random drive mode
 
 # Power settings
 voltageIn = 12.0                        # Total battery voltage to the ThunderBorg
@@ -134,7 +135,10 @@ try:
     upDown = 0
     driveSpeed = 0
     randomMode = False
-    randomLast = 0
+    # preventing Auto Stop as first random choice
+    randomChoice = 1
+    randomLast = 1
+
     # Loop indefinitely
     while running:
         # Get the latest events from the system
@@ -143,11 +147,10 @@ try:
         # We only want to let the train stop if it was driving or start driving if it was standing still
         # While driving it is not possible to let the random mode slow it down and then continue driving in the
         # opposite direction (this is possible by controlling the joystick but for random mode a bit unrealistic)
-        if randomMode and random.randint(0,10000) == 0:
-            randomChoice = random.randint(1,3)
+        if randomMode and random.randint(0,randomDriveRange) == 0:
             # Keep trying to find an operation which is different from the last one
             while randomChoice == randomLast:
-                randomChoice = random.randint(1,3)
+                randomChoice = random.randint(1,5)
             randomLast = randomChoice
             if randomChoice == 1:
                 logger.info ('Slow Auto Stop by random mode, driveSpeed slowly down from %02.2f to 0.00' % driveSpeed)
@@ -163,7 +166,7 @@ try:
                         if driveSpeed < zeroOffsetSpeed:
                             driveSpeed = 0
                         TB.SetMotor1(driveSpeed * maxPower)
-            elif randomChoice == 2 and driveSpeed < zeroOffsetSpeed and driveSpeed > -zeroOffsetSpeed:
+            elif (randomChoice == 2 or randomChoice == 3) and driveSpeed < zeroOffsetSpeed and driveSpeed > -zeroOffsetSpeed:
                 # go drive forward only if we currently are standing 'still'
                 if random.choice([True, False]):
                     max = slowAutoStartMaxSpeed
@@ -175,7 +178,7 @@ try:
                     if driveSpeed > max:
                         driveSpeed = max
                     TB.SetMotor1(driveSpeed * maxPower)
-            elif randomChoice == 3 and driveSpeed < zeroOffsetSpeed and driveSpeed > -zeroOffsetSpeed:
+            elif (randomChoice == 4 or randomChoice == 5) and driveSpeed < zeroOffsetSpeed and driveSpeed > -zeroOffsetSpeed:
                 # go drive reverse only if we currently standing 'still'
                 if random.choice([True, False]):
                     max = slowAutoStartMaxSpeed
