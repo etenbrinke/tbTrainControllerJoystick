@@ -19,13 +19,16 @@ The following Axis and buttons has been defined:
 
 ```
 # Settings for the joystick
+# index numbers for each control: https://www.piborg.org/blog/rpi-ps3-help
 axisUpDown = 1                          # Joystick axis to read for up / down position
-axisUpDownInverted = False              # Set this to True if up and down appear to be swapped
+axisUpDownInverted = True               # Set this to True if up and down appear to be swapped
 buttonEmergencyBreak = 14               # Joystick button number (Cross) for the Emergency Break
 buttonSlowAutoStop = 15                 # Joystick button number (Square) for slow auto stop
 buttonAxisMotionMode = 11               # Joystick button number for selecting Axis Motion mode (R1)
 buttonSlowAutoStartForward = 12         # Joystick button number (Triangle) for slow auto forward to half speed of max speed
 buttonSlowAutoStartReverse = 13         # Joystick button number (Circle) for slow auto reverse to half speed of max speed
+buttonRandomModeOn = 10                 # Joystick button number for selecting random mode ON (L1)
+buttonRandomModeOff = 8                 # Joystick button number for selecting random mode OFF (L2)
 ```
 
 With the left Axis the train speed can be increased or descreased in both forward and reverse direction. Holding it Up slowly increases the speed in forward direction. Holding it down increases speed in reverse direction.
@@ -41,12 +44,13 @@ Other buttons:
 The following speed control settings can be adjusted:
 
 ```
-# Settings for speed control
 accelerationFactor = 0.001              # Acceleration factor for speedup and slow down
-slowDeAccelerationFactor = 0.00005      # Deacceleration factor for auto stop
-slowAccelerationFactor = 0.00005        # Acceleration factor for auto start
-slowAutoStartMaxSpeed = 0.75            # Max speed for slow auto forward and reverse
+slowDeAccelerationFactor = 0.00003      # Deacceleration factor for auto stop
+slowAccelerationFactor = 0.00003        # Acceleration factor for auto start
+slowAutoStartMaxSpeed = 0.60            # Max speed for slow auto forward and reverse
+slowAutoStartMediumSpeed = 0.45         # Medium speed for slow auto forward and reverse (only used in random mode)
 zeroOffsetSpeed = 0.01                  # A value smaller (bigger in case speed is negative) is considered as zero speed
+randomDriveRange = 5000                 # Choice value between 0 and randomDriveRange for random drive mode
 ```
 
 ## Auto start controller on Pi
